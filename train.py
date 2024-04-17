@@ -1,74 +1,43 @@
-# source: https://github.com/karpathy/ng-video-lecture/tree/master
-# video: https://www.youtube.com/watch?v=kCc8FmEb1nY
 # dataset: https://www.kaggle.com/datasets/louise2001/goethe/data
 
 from tqdm import tqdm
 import torch
 from GPTLanguageModel import GPTLanguageModel
+import config
+import data
 
 torch.manual_seed(1337)
 
-SAVE_TO_PATH = 'model_weights.pth'
-
 # hyperparameters
-max_iters = 500
-eval_interval = 100
+max_iters = 1000
+eval_interval = 500
 learning_rate = 3e-4
-eval_iters = 200
+eval_iters = 100
 
-batch_size = 4 # how many independent sequences will we process in parallel?
-block_size = 8 # what is the maximum context length for predictions?
-n_embd = 32
-n_head = 4
-n_layer = 3
-dropout = 0.2
+default_params = {
+  'batch_size': 64, # how many independent sequences will we process in parallel?
+  'block_size': 256, # what is the maximum context length for predictions?
+  'n_embd': 384,
+  'n_head': 6,
+  'n_layer': 6,
+  'dropout': 0.2,
+}
 
 
-if torch.cuda.is_available():
-    device = 'cuda'
-if torch.backends.mps.is_available():
-    device = 'mps'
-else:
-    device = 'cpu'
-print(("Using GPU" if device != 'cpu' else "Using CPU"))
+print(("Using gpu" if config.device != 'cpu' else "Using cpu"))
 
-with open('goethe/full.txt', 'r', encoding='utf-8') as f:
-  text = f.read()
-
-# here are all the unique characters that occur in this text
-chars = sorted(list(set(text)))
-vocab_size = len(chars)
-# create a mapping from characters to integers
-stoi = { ch:i for i,ch in enumerate(chars) }
-itos = { i:ch for i,ch in enumerate(chars) }
-encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
-decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
-
-# Train and test splits
-data = torch.tensor(encode(text), dtype=torch.long)
-n = int(0.9*len(data)) # first 90% will be train, rest val
-train_data = data[:n]
-val_data = data[n:]
-
-# data loading
-def get_batch(split):
-    # generate a small batch of data of inputs x and targets y
-    data = train_data if split == 'train' else val_data
-    ix = torch.randint(len(data) - block_size, (batch_size,))
-    x = torch.stack([data[i:i+block_size] for i in ix])
-    y = torch.stack([data[i+1:i+block_size+1] for i in ix])
-    x, y = x.to(device), y.to(device)
-    return x, y
+data.load_data('goethe/full.txt')
+data.get_train_data()
 
 
 @torch.no_grad()
-def estimate_loss():
+def estimate_loss(model, block_size, batch_size):
   out = {}
   model.eval()
   for split in ['train', 'val']:
     losses = torch.zeros(eval_iters)
     for k in range(eval_iters):
-      X, Y = get_batch(split)
+      X, Y = data.get_batch(split, block_size=block_size, batch_size=batch_size, device=config.device)
       logits, loss = model(X,Y)
       losses[k] = loss.item()
     out[split] = losses.mean()
@@ -77,23 +46,31 @@ def estimate_loss():
 
 
 if __name__ == "__main__":
-  model = GPTLanguageModel(vocab_size, batch_size=batch_size, block_size=block_size, n_embd=n_embd, n_head=n_head, n_layer=n_layer, dropout=dropout, device=device)
-  m = model.to(device)
+  checkpoint = torch.load(config.MODEL_PATH)
+  params = checkpoint["params"]
+  epoch = checkpoint["epoch"]
+  #params = default_params
+  #epoch = 0
+
+  model = GPTLanguageModel(data.vocab_size, device=config.device, **params)
+  model.load_state_dict(checkpoint["model_state_dict"])
+  m = model.to(config.device) 
   # print the number of parameters in the model
   print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')
 
   # create a PyTorch optimizer
   optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+  optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
-  for iter in range(max_iters//eval_interval):
+  for iter in range(epoch, epoch + max_iters//eval_interval):
 
     # every once in a while evaluate the loss on train and val sets
-    losses = estimate_loss()
-    print(f"step {iter*eval_interval} of {max_iters}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+    losses = estimate_loss(m, params["block_size"], params["batch_size"])
+    print(f"epoch {iter+1} of {epoch + max_iters//eval_interval}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
 
     for i in tqdm(range(eval_interval)):
       # sample a batch of data
-      xb, yb = get_batch('train')
+      xb, yb = data.get_batch('train', block_size=params["block_size"], batch_size=params["batch_size"], device=config.device)
 
       # evaluate the loss
       logits, loss = model(xb, yb)
@@ -101,10 +78,18 @@ if __name__ == "__main__":
       loss.backward()
       optimizer.step()
 
-  losses = estimate_loss()
+    torch.save({
+    'epoch': iter + 1,
+    'model_state_dict': m.state_dict(),
+    'optimizer_state_dict': optimizer.state_dict(),
+    'losses': losses, 
+    'params': default_params,
+    }, config.MODEL_PATH)
+
+  losses = estimate_loss(m, params["block_size"], params["batch_size"])
   print(f"step {max_iters} of {max_iters}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
-  torch.save(m.state_dict(), SAVE_TO_PATH)
   # generate from the model
-  context = torch.zeros((1, 1), dtype=torch.long, device=device)
-  print(decode(m.generate(context, max_new_tokens=500, block_size=block_size)[0].tolist()))
-  #print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
+  m.eval()
+  context = torch.zeros((1, 1), dtype=torch.long, device=config.device)
+  print(data.decode(m.generate(context, max_new_tokens=500, block_size=params["block_size"])[0].tolist()))
+  open(f'werke/werk_{iter+1}.txt', 'w').write(data.decode(m.generate(context, max_new_tokens=10000, block_size=params["block_size"])[0].tolist()))

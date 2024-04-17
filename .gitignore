@@ -4,3 +4,4 @@ werke/
 .DS_Store
 *.pth
 __pycache__/
+models/*

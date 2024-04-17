@@ -1,6 +1,5 @@
 # source: https://github.com/karpathy/ng-video-lecture/tree/master
 # video: https://www.youtube.com/watch?v=kCc8FmEb1nY
-# dataset: https://www.kaggle.com/datasets/louise2001/goethe/data
 
 import torch
 import torch.nn as nn
