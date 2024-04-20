@@ -8,6 +8,8 @@ import data
 
 torch.manual_seed(1337)
 
+load_model = False
+
 # hyperparameters
 max_iters = 1000
 eval_interval = 500
@@ -26,7 +28,7 @@ default_params = {
 
 print(("Using gpu" if config.device != 'cpu' else "Using cpu"))
 
-data.load_data('goethe/full.txt')
+data.load_data('goethe/full.txt', word_tokens_param=True)
 data.get_train_data()
 
 
@@ -46,21 +48,26 @@ def estimate_loss(model, block_size, batch_size):
 
 
 if __name__ == "__main__":
-  checkpoint = torch.load(config.MODEL_PATH)
-  params = checkpoint["params"]
-  epoch = checkpoint["epoch"]
-  #params = default_params
-  #epoch = 0
+  params = default_params
+  epoch = 0
+
+  if load_model:
+    checkpoint = torch.load(config.MODEL_PATH)
+    params = checkpoint["params"]
+    epoch = checkpoint["epoch"]
 
   model = GPTLanguageModel(data.vocab_size, device=config.device, **params)
-  model.load_state_dict(checkpoint["model_state_dict"])
+  if load_model:
+    model.load_state_dict(checkpoint["model_state_dict"])
+
   m = model.to(config.device) 
   # print the number of parameters in the model
   print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')
 
   # create a PyTorch optimizer
   optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-  optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+  if load_model:
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
   for iter in range(epoch, epoch + max_iters//eval_interval):
 
@@ -92,4 +99,4 @@ if __name__ == "__main__":
   m.eval()
   context = torch.zeros((1, 1), dtype=torch.long, device=config.device)
   print(data.decode(m.generate(context, max_new_tokens=500, block_size=params["block_size"])[0].tolist()))
-  open(f'werke/werk_{iter+1}.txt', 'w').write(data.decode(m.generate(context, max_new_tokens=10000, block_size=params["block_size"])[0].tolist()))
+  #open(f'werke/werk_{iter+1}.txt', 'w').write(data.decode(m.generate(context, max_new_tokens=10000, block_size=params["block_size"])[0].tolist()))
