@@ -9,8 +9,9 @@ def load_data(file, word_tokens_param=False):
     
     if word_tokens:
         from torchtext.vocab import build_vocab_from_iterator
-        text_stripped= re.sub(r'[\W|\d|_]', ' ', text).lower()
-        text= re.sub(r'\b[a-zÀ-ÿ]\b', '', text_stripped)
+        text_stripped= re.sub(r'[^a-zÀ-ÿ.,?]', ' ', text.lower())
+        text_stripped= re.sub(r'\b[a-zÀ-ÿ]\b', '', text_stripped)
+        text = re.sub(r'(?=[.,?])', ' ', text_stripped)
         vocab = build_vocab_from_iterator([text.split()], max_tokens=5000, specials=["<unk>"])
         vocab.set_default_index(vocab["<unk>"])
         vocab_size = len(vocab)
@@ -47,8 +48,10 @@ def get_batch(split, block_size, batch_size, device='cpu'):
 
 encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
 def decode(l): 
-    if isinstance(l, int):
+    if not isinstance(l, list):
+        if word_tokens and itos[l] not in ['.',',','?']:
+            return ' ' + itos[l]
         return itos[l]
-    if word_tokens:
-        return ' '.join([itos[i] for i in l])
+    elif word_tokens:
+        return re.sub('\s+([.,?])', r'\1', ' '.join([itos[i] for i in l]))
     return ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string

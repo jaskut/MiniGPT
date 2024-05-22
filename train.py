@@ -28,7 +28,7 @@ default_params = {
 
 print(("Using gpu" if config.device != 'cpu' else "Using cpu"))
 
-data.load_data('goethe/full.txt', word_tokens_param=True)
+data.load_data('goethe/full.txt', word_tokens_param=config.word_tokens)
 data.get_train_data()
 
 
@@ -98,5 +98,5 @@ if __name__ == "__main__":
   # generate from the model
   m.eval()
   context = torch.zeros((1, 1), dtype=torch.long, device=config.device)
-  print(data.decode(m.generate(context, max_new_tokens=500, block_size=params["block_size"])[0].tolist()))
-  #open(f'werke/werk_{iter+1}.txt', 'w').write(data.decode(m.generate(context, max_new_tokens=10000, block_size=params["block_size"])[0].tolist()))
+  print(data.decode(m.generate(context, max_new_tokens=100, block_size=params["block_size"], skip=config.word_tokens)[0].tolist()))
+  open(f'werke/werk_{iter+1}.txt', 'w').write(data.decode(m.generate(context, max_new_tokens=2000, block_size=params["block_size"], skip=config.word_tokens)[0].tolist()))
