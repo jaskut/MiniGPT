@@ -25,6 +25,14 @@ def load_data(file, word_tokens_param=False):
         stoi = { ch:i for i,ch in enumerate(chars) }
         itos = chars
 
+def load_vocab(vocab, word_tokens_param):
+    global text, vocab_size, stoi, itos, word_tokens
+    text=""
+    vocab_size = len(vocab)
+    stoi = { ch:i for i,ch in enumerate(vocab) }
+    itos = vocab
+    word_tokens = word_tokens_param
+
 def get_train_data():
     global train_data, val_data
     # Train and test splits

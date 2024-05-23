@@ -23,13 +23,11 @@ default_params = {
   'n_head': 6,
   'n_layer': 6,
   'dropout': 0.2,
+  'word_tokens': False,
 }
 
 
 print(("Using gpu" if config.device != 'cpu' else "Using cpu"))
-
-data.load_data('goethe/full.txt', word_tokens_param=config.word_tokens)
-data.get_train_data()
 
 
 @torch.no_grad()
@@ -55,6 +53,9 @@ if __name__ == "__main__":
     checkpoint = torch.load(config.MODEL_PATH)
     params = checkpoint["params"]
     epoch = checkpoint["epoch"]
+
+  data.load_data('goethe/full.txt', word_tokens_param=params['word_tokens'])
+  data.get_train_data()
 
   model = GPTLanguageModel(data.vocab_size, device=config.device, **params)
   if load_model:
@@ -90,7 +91,8 @@ if __name__ == "__main__":
     'model_state_dict': m.state_dict(),
     'optimizer_state_dict': optimizer.state_dict(),
     'losses': losses, 
-    'params': default_params,
+    'params': params,
+    'vocab': data.itos,
     }, config.MODEL_PATH)
 
   losses = estimate_loss(m, params["block_size"], params["batch_size"])
@@ -98,5 +100,5 @@ if __name__ == "__main__":
   # generate from the model
   m.eval()
   context = torch.zeros((1, 1), dtype=torch.long, device=config.device)
-  print(data.decode(m.generate(context, max_new_tokens=100, block_size=params["block_size"], skip=config.word_tokens)[0].tolist()))
-  open(f'werke/werk_{iter+1}.txt', 'w').write(data.decode(m.generate(context, max_new_tokens=2000, block_size=params["block_size"], skip=config.word_tokens)[0].tolist()))
+  print(data.decode(m.generate(context, max_new_tokens=100, block_size=params["block_size"])[0].tolist()))
+  open(f'werke/werk_{iter+1}.txt', 'w').write(data.decode(m.generate(context, max_new_tokens=2000, block_size=params["block_size"])[0].tolist()))

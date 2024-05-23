@@ -1,7 +1,6 @@
 import torch
 
-MODEL_PATH = 'models/model_1.pt'
-word_tokens = False
+MODEL_PATH = 'models/model.pt'
 
 if torch.cuda.is_available():
     device = 'cuda'
